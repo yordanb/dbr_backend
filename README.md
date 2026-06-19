@@ -1,3 +1,9 @@
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-Production-green)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
+![TimescaleDB](https://img.shields.io/badge/TimescaleDB-enabled-orange)
+![Docker](https://img.shields.io/badge/Docker-ready-blue)
+
 # DBR Management API
 
 Daily Breakdown Report (DBR) Management System built with FastAPI, PostgreSQL, TimescaleDB, and Docker.
