@@ -1,0 +1,49 @@
+services:
+
+  dbr-db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: dbr-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: dbr_db
+      POSTGRES_USER: dbradmin
+      POSTGRES_PASSWORD: dbrpassword
+
+    ports:
+      - "5435:5432"
+
+    volumes:
+      - dbr-db-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    networks:
+      - backend-network
+
+  dbr-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+
+    container_name: dbr-api
+
+    restart: unless-stopped
+
+    env_file:
+      - ./api/.env
+
+    ports:
+      - "8010:8010"
+
+    depends_on:
+      - dbr-db
+
+    networks:
+      - backend-network
+
+volumes:
+  dbr-db-data:
+
+networks:
+  backend-network:
+    external: true
