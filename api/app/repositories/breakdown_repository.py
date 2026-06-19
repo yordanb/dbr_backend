@@ -6,6 +6,7 @@ from app.models.breakdown import BreakdownHistory
 def get_breakdowns(
     db: Session,
     cn: str | None = None,
+    breakdown_code: str | None = None,
     start_date=None,
     end_date=None,
     page: int = 1,
@@ -14,6 +15,10 @@ def get_breakdowns(
     query = db.query(BreakdownHistory)
     if cn:
         query = query.filter(BreakdownHistory.cn == cn)
+    if breakdown_code:
+        query = query.filter(
+            BreakdownHistory.breakdown_code == breakdown_code
+        )
     if start_date:
         query = query.filter(
             BreakdownHistory.report_date >= start_date

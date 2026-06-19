@@ -15,6 +15,7 @@ router = APIRouter()
 @router.get("/breakdowns")
 def list_breakdowns(
     cn: str | None = None,
+    breakdown_code: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
 
@@ -35,6 +36,7 @@ def list_breakdowns(
     return get_breakdowns(
         db=db,
         cn=cn,
+        breakdown_code=breakdown_code,
         start_date=start_date,
         end_date=end_date,
         page=page,
