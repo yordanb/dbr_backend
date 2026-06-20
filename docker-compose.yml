@@ -6,9 +6,9 @@ services:
     restart: unless-stopped
 
     environment:
-      POSTGRES_DB: dbr_db
-      POSTGRES_USER: dbradmin
-      POSTGRES_PASSWORD: dbrpassword
+      POSTGRES_DB: ${DB_NAME:-dbr_db}
+      POSTGRES_USER: ${DB_USER:-dbradmin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dbrpassword}
 
     ports:
       - "5435:5432"
@@ -16,6 +16,13 @@ services:
     volumes:
       - dbr-db-data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-dbradmin} -d ${DB_NAME:-dbr_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
     networks:
       - backend-network
@@ -26,7 +33,6 @@ services:
       dockerfile: Dockerfile
 
     container_name: dbr-api
-
     restart: unless-stopped
 
     env_file:
@@ -36,7 +42,15 @@ services:
       - "8010:8010"
 
     depends_on:
-      - dbr-db
+      dbr-db:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
     networks:
       - backend-network

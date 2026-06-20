@@ -1,0 +1,15 @@
+.env
+.env.*
+__pycache__/
+*.py[cod]
+*.egg-info/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+db/data/
+*.xlsx
+dist/
+build/
+.pytest_cache/
+*.xlsx
