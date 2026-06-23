@@ -29,7 +29,7 @@ def clean_num(val):
 
 
 def parse_date(raw):
-    """Parse '01 JUNI  2026' from row 4 col C"""
+    """Parse '01 JUNI  2026' from row 4 col C (IMMOCS format)"""
     if not raw:
         return None
     m = re.search(r"(\d{1,2})\s+([A-Z]+)\s+(\d{4})", str(raw).upper())
@@ -41,16 +41,55 @@ def parse_date(raw):
     return date(int(m.group(3)), mon, int(m.group(1)))
 
 
+def parse_fui_date(raw):
+    """Parse per-row date from FUI Dashboard format: dd/mm/yyyy, d/m/yyyy, dd/mm/yy"""
+    if raw is None:
+        return None
+    # Excel serial number
+    try:
+        n = float(str(raw).strip())
+        if n > 40000:
+            from datetime import timedelta
+            excel_epoch = date(1899, 12, 30)
+            return excel_epoch + timedelta(days=n)
+    except (ValueError, TypeError):
+        pass
+
+    s = str(raw).strip()
+    # dd/mm/yyyy or d/m/yyyy
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})$", s)
+    if m:
+        return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    # dd/mm/yy
+    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{2})$", s)
+    if m:
+        y = int(m.group(3))
+        return date(2000 + y, int(m.group(2)), int(m.group(1)))
+    # yyyy-mm-dd
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})$", s)
+    if m:
+        return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return None
+
+
 def parse_start_breakdown(val):
-    """Parse '28/03/2026 (08:00)' -> datetime"""
+    """Parse '28/03/2026 (08:00)' or '17/08/24 (06:00)' -> datetime"""
     if val is None:
         return None
     s = str(val).strip()
     if s.startswith("=") or s in ("", "####", "None"):
         return None
+    # dd/mm/yyyy (HH:MM)
     m = re.match(r"(\d{2})/(\d{2})/(\d{4})\s*\((\d{2}):(\d{2})\)", s)
     if m:
         return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)),
+                        int(m.group(4)), int(m.group(5)))
+    # dd/mm/yy (HH:MM)
+    m = re.match(r"(\d{2})/(\d{2})/(\d{2})\s*\((\d{2}):(\d{2})\)", s)
+    if m:
+        y = int(m.group(3))
+        y += 1900 if y > 50 else 2000
+        return datetime(y, int(m.group(2)), int(m.group(1)),
                         int(m.group(4)), int(m.group(5)))
     return None
 
@@ -81,42 +120,55 @@ def parse_time_val(val):
     return None
 
 
+def detect_format(ws) -> str:
+    """Detect sheet format: 'fui' if row 1 col A has 'DATE', else 'immocs'"""
+    try:
+        first_rows = list(ws.iter_rows(min_row=1, max_row=1, max_col=1, values_only=True))
+        if first_rows:
+            v = first_rows[0][0]
+            if v and str(v).strip().upper() == "DATE":
+                return "fui"
+    except Exception:
+        pass
+    return "immocs"
+
+
 def parse_sheet(ws, source_file: str) -> list[dict]:
-    """Parse one sheet -> list of row dicts"""
+    """Parse one sheet (IMMOCS/DBR format) -> list of row dicts"""
     rd = parse_date(ws.cell(4, 3).value)
     if not rd:
         return []
 
     rows = []
-    for r in range(9, ws.max_row + 1):
-        raw_cn = ws.cell(r, 2).value
-        if not raw_cn or str(raw_cn).strip() in ("", "###") or str(raw_cn).startswith("="):
+    for r, row in enumerate(ws.iter_rows(min_row=9, values_only=True), start=9):
+        raw_cn = row[1]  # col B (index 1)
+        if raw_cn is None or str(raw_cn).strip() in ("", "###") or str(raw_cn).startswith("="):
             continue
         cn = str(raw_cn).strip()
 
-        crew = clean(ws.cell(r, 3).value)
+        crew = clean(row[2])
         if crew and crew not in VALID_CREWS:
             crew = None
 
-        code = clean(ws.cell(r, 5).value)
+        code = clean(row[4])
         if code:
             code = code.upper()
             if code not in VALID_CODES:
                 code = None
 
         # row_no from col A
-        raw_rn = ws.cell(r, 1).value
+        raw_rn = row[0]
         if isinstance(raw_rn, (int, float)):
             row_no = int(raw_rn)
         else:
             row_no = r - 8
 
-        start_bd = parse_start_breakdown(ws.cell(r, 8).value)
-        start_bd_hour = parse_time_val(ws.cell(r, 9).value)
-        rfu_bour = parse_time_val(ws.cell(r, 10).value)
+        start_bd = parse_start_breakdown(row[7])
+        start_bd_hour = parse_time_val(row[8])
+        rfu_bour = parse_time_val(row[9])
 
-        # MO number (col L)
-        mo_raw = clean(ws.cell(r, 12).value)
+        # MO number (col L — index 11)
+        mo_raw = clean(row[11])
         if mo_raw and mo_raw.replace(".", "").replace("-", "").isdigit():
             mo_raw = str(int(float(mo_raw)))
 
@@ -127,13 +179,13 @@ def parse_sheet(ws, source_file: str) -> list[dict]:
             "row_no": row_no,
             "cn": cn,
             "crew_type": crew,
-            "section": clean(ws.cell(r, 3).value),
-            "trouble_description": clean(ws.cell(r, 4).value),
+            "section": clean(row[2]),
+            "trouble_description": clean(row[3]),
             "breakdown_code": code,
-            "hm_start": clean(ws.cell(r, 6).value),
-            "hour_meter": clean_num(ws.cell(r, 6).value),
-            "location": clean(ws.cell(r, 7).value),
-            "start_breakdown": clean(ws.cell(r, 8).value),
+            "hm_start": clean(row[5]),
+            "hour_meter": clean_num(row[5]),
+            "location": clean(row[6]),
+            "start_breakdown": clean(row[7]),
             "start_bd_hour": start_bd_hour,
             "rfu_bour": rfu_bour,
             "start_time": None,
@@ -141,12 +193,80 @@ def parse_sheet(ws, source_file: str) -> list[dict]:
             "total": None,
             "total_hours": None,
             "hours_breakdown": None,
-            "wo_number": clean(ws.cell(r, 11).value),
-            "notification_number": clean(ws.cell(r, 13).value),
+            "wo_number": clean(row[10]),
+            "notification_number": clean(row[12]),
             "mo_number": mo_raw,
-            "action_taken": clean(ws.cell(r, 14).value),
-            "mechanic": clean(ws.cell(r, 15).value),
-            "gl": clean(ws.cell(r, 16).value),
+            "action_taken": clean(row[13]),
+            "mechanic": clean(row[14]),
+            "gl": clean(row[15]),
+            "source_file": source_file,
+        })
+    return rows
+
+
+def parse_fui_sheet(ws, source_file: str) -> list[dict]:
+    """
+    Parse FUI Dashboard format:
+    Row 1: Header (DATE | C/N | SECTION | Trouble Description | Code | HM Start | LOC | Start Break Down | Start Time | Finish Time | Total | WO | NOTIFICATION | ACTION | MECHANIC | GL)
+    Row 2+: Data, date per-row in col A
+    """
+    rows = []
+    for r, row in enumerate(ws.iter_rows(min_row=2, max_col=16, values_only=True), start=2):
+        raw_date = row[0]
+        rd = parse_fui_date(raw_date)
+        if not rd:
+            continue
+
+        cn = row[1]
+        if cn is None or str(cn).strip() == "":
+            continue
+        cn = str(cn).strip()
+
+        crew = clean(row[2])
+        if crew and crew not in VALID_CREWS:
+            crew = None
+
+        code = clean(row[4])
+        if code:
+            code = code.upper()
+            if code not in VALID_CODES:
+                code = None
+
+        start_bd = parse_start_breakdown(row[7])
+
+        # WO number (col L — index 11) — also could serve as MO if numeric
+        raw_wo = clean(row[11])
+        mo_raw = None
+        if raw_wo and raw_wo.replace(".", "").replace("-", "").isdigit():
+            mo_raw = str(int(float(raw_wo)))
+
+        rows.append({
+            "report_date_raw": clean(row[0]),
+            "report_date": rd,
+            "breakdown_start_date": start_bd.date() if start_bd else None,
+            "row_no": r - 1,
+            "cn": cn,
+            "crew_type": crew,
+            "section": clean(row[2]),
+            "trouble_description": clean(row[3]),
+            "breakdown_code": code,
+            "hm_start": clean(row[5]),
+            "hour_meter": clean_num(row[5]),
+            "location": clean(row[6]),
+            "start_breakdown": clean(row[7]),
+            "start_bd_hour": None,
+            "rfu_bour": None,
+            "start_time": clean(row[8]),
+            "finish_time": clean(row[9]),
+            "total": clean(row[10]),
+            "total_hours": None,
+            "hours_breakdown": None,
+            "wo_number": raw_wo,
+            "notification_number": clean(row[12]),
+            "mo_number": mo_raw,
+            "action_taken": clean(row[13]),
+            "mechanic": clean(row[14]),
+            "gl": clean(row[15]),
             "source_file": source_file,
         })
     return rows
@@ -172,7 +292,12 @@ def import_excel(
     wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
     all_rows = []
     for sn in wb.sheetnames:
-        all_rows.extend(parse_sheet(wb[sn], filename))
+        ws = wb[sn]
+        fmt = detect_format(ws)
+        if fmt == "immocs":
+            all_rows.extend(parse_sheet(ws, filename))
+        else:
+            all_rows.extend(parse_fui_sheet(ws, filename))
     wb.close()
 
     if not all_rows:
