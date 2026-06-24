@@ -1,13 +1,14 @@
 from datetime import datetime
 
 from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 
 from app.models.breakdown import BreakdownHistory
+from app.models.import_log import ImportLog
 
 router = APIRouter(
     prefix="/api/v1/breakdowns",
@@ -45,3 +46,17 @@ def get_breakdowns(
     ).all()
 
     return data
+
+
+@router.delete("/truncate")
+def truncate_breakdowns(db: Session = Depends(get_db)):
+    """Truncate all breakdown data. Requires admin authorization."""
+    try:
+        count = db.query(BreakdownHistory).count()
+        db.query(ImportLog).delete()
+        db.query(BreakdownHistory).delete()
+        db.commit()
+        return {"status": "ok", "deleted": count}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,13 +1,14 @@
 from datetime import date
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.repositories.breakdown_repository import (
     get_breakdowns,
     get_master_cn
 )
+from app.models.breakdown import BreakdownHistory
+from app.models.import_log import ImportLog
 from app.schemas.breakdown import BreakdownResponse
-
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ def list_breakdowns(
     breakdown_code: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    sort: str | None = None,
 
     page: int = Query(
         default=1,
@@ -42,6 +44,20 @@ def list_breakdowns(
         page=page,
         size=size
     )
+
+
+@router.delete("/breakdowns/truncate")
+def truncate_breakdowns(db: Session = Depends(get_db)):
+    """Truncate all breakdown data. Admin only."""
+    try:
+        count = db.query(BreakdownHistory).count()
+        db.query(ImportLog).delete()
+        db.query(BreakdownHistory).delete()
+        db.commit()
+        return {"status": "ok", "deleted": count}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/master/cn")

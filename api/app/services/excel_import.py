@@ -73,7 +73,8 @@ def parse_fui_date(raw):
 
 
 def parse_start_breakdown(val):
-    """Parse '28/03/2026 (08:00)' or '17/08/24 (06:00)' -> datetime"""
+    """Parse '28/03/2026 (08:00)' or '17/08/24 (06:00)' -> datetime
+       Returns None for any invalid/out-of-range value."""
     if val is None:
         return None
     s = str(val).strip()
@@ -82,15 +83,25 @@ def parse_start_breakdown(val):
     # dd/mm/yyyy (HH:MM)
     m = re.match(r"(\d{2})/(\d{2})/(\d{4})\s*\((\d{2}):(\d{2})\)", s)
     if m:
-        return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)),
-                        int(m.group(4)), int(m.group(5)))
+        try:
+            h, mi = int(m.group(4)), int(m.group(5))
+            if 0 <= h <= 23 and 0 <= mi <= 59:
+                return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)), h, mi)
+        except ValueError:
+            pass
+        return None
     # dd/mm/yy (HH:MM)
     m = re.match(r"(\d{2})/(\d{2})/(\d{2})\s*\((\d{2}):(\d{2})\)", s)
     if m:
-        y = int(m.group(3))
-        y += 1900 if y > 50 else 2000
-        return datetime(y, int(m.group(2)), int(m.group(1)),
-                        int(m.group(4)), int(m.group(5)))
+        try:
+            h, mi = int(m.group(4)), int(m.group(5))
+            if 0 <= h <= 23 and 0 <= mi <= 59:
+                y = int(m.group(3))
+                y += 1900 if y > 50 else 2000
+                return datetime(y, int(m.group(2)), int(m.group(1)), h, mi)
+        except ValueError:
+            pass
+        return None
     return None
 
 
