@@ -40,6 +40,9 @@ services:
     env_file:
       - ./api/.env
 
+    environment:
+      - MTE_DB_PASSWORD=postgres123
+
     ports:
       - "8010:8010"
 

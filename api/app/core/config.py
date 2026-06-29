@@ -9,8 +9,12 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
 
-    class Config:
-        env_file = ".env"
+    # Secondary DB (db_mte)
+    MTE_DB_HOST: str = "postgres"
+    MTE_DB_PORT: int = 5432
+    MTE_DB_NAME: str = "db_mte"
+    MTE_DB_USER: str = "postgres"
+    MTE_DB_PASSWORD: str = "postgres123"
 
 
 settings = Settings()
