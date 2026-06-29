@@ -1,0 +1,34 @@
+from logging.config import fileConfig
+from sqlalchemy import engine_from_config, pool
+from alembic import context
+import os, sys
+sys.path.insert(0, "/app")
+from app.core.config import settings
+from app.core.database import Base
+from app.models.breakdown import BreakdownHistory
+from app.models.import_log import ImportLog
+
+config = context.config
+fileConfig(config.config_file_name)
+target_metadata = Base.metadata
+
+def get_url():
+    return f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+
+def run_migrations_offline():
+    url = get_url()
+    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+    with context.begin_transaction():
+        context.run_migrations()
+
+def run_migrations_online():
+    connectable = engine_from_config({"sqlalchemy.url": get_url()}, prefix="sqlalchemy.", poolclass=pool.NullPool)
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata, include_schemas=True)
+        with context.begin_transaction():
+            context.run_migrations()
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
