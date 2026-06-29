@@ -16,4 +16,4 @@ EXPOSE 8010
 
 USER appuser
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8010"]
+CMD ["gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8010", "--access-logfile", "-", "--error-logfile", "-"]
